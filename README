@@ -1,0 +1,153 @@
+# Procurement Operations Agent
+
+An agentic AI application that helps internal procurement teams evaluate purchase requests, retrieve relevant procurement guidance, investigate supplier options, and determine the appropriate next action.
+
+The initial scope focuses on **IT procurement**, such as laptops, monitors, and related hardware.
+
+## Business Problem
+
+Procurement teams often need to combine information from multiple sources before making a decision:
+
+* internal purchase requirements
+* procurement policies
+* supplier information
+* historical tenders
+* evaluation criteria
+* sustainability requirements
+* approval rules
+
+This process can involve significant manual research and repetitive analysis.
+
+The goal of this project is to build an AI agent that can autonomously investigate a procurement request, gather the required evidence, and produce a structured recommendation while escalating decisions that require human approval.
+
+## Example
+
+Input:
+
+> We need 40 laptops for our Barcelona office.
+> Budget: €45,000.
+> Delivery required within 3 weeks.
+
+The agent may:
+
+1. Extract the purchase requirements.
+2. Retrieve relevant procurement rules and evaluation guidance.
+3. Search historical procurement data and potential suppliers.
+4. Compare available options.
+5. Identify missing information or risks.
+6. Determine whether human approval is required.
+7. Return a recommendation with supporting evidence.
+
+## Agentic Workflow
+
+The application is designed as a tool-using agent rather than a fixed LLM pipeline.
+
+The agent can decide which actions are required depending on the request.
+
+```text
+Purchase Request
+      |
+      v
+Requirement Analysis
+      |
+      v
+Procurement Agent
+      |
+      +--> Search Procurement Knowledge Base
+      |
+      +--> Search Historical Tenders
+      |
+      +--> Retrieve Supplier Information
+      |
+      +--> Evaluate Procurement Criteria
+      |
+      +--> Check Risks / Approval Requirements
+      |
+      v
+Recommendation / Human Escalation
+```
+
+## Data Sources
+
+The project uses public procurement material from official sources.
+
+The initial RAG knowledge base includes:
+
+* EU Public Procurement Directive 2014/24/EU
+* World Bank Procurement Regulations
+* World Bank guidance on evaluating bids and proposals
+* World Bank Value for Money guidance
+* EU Green Public Procurement criteria for computers and related hardware
+* EU socially responsible procurement case studies
+
+Historical procurement notices will be retrieved from **TED (Tenders Electronic Daily)**.
+
+Source files are not committed to the repository. Official download links are documented separately.
+
+## Planned Stack
+
+* **Python**
+* **LangGraph**
+* **LangChain**
+* **Jev**
+* **FastAPI**
+* **Amazon Bedrock**
+* **PostgreSQL / pgvector**
+* **TED API**
+* **Docker**
+* **GitHub Actions**
+* **AWS**
+
+## Role of AI Components
+
+### LLM
+
+Used for reasoning, requirement interpretation, evidence synthesis, and recommendation generation.
+
+### LangGraph
+
+Controls the stateful agent workflow and tool execution.
+
+### RAG
+
+Provides access to procurement regulations, evaluation guidance, sustainability criteria, and historical procurement knowledge.
+
+### Jev
+
+Used for structured decisions such as:
+
+* procurement risk
+* approval requirements
+* supplier suitability
+* whether additional investigation is required
+
+## Initial Scope
+
+V1 will focus on:
+
+* IT hardware procurement
+* one procurement request at a time
+* one primary agent
+* public procurement data
+* recommendation and escalation rather than autonomous purchasing
+
+The system will **not automatically place orders or approve high-impact procurement decisions**.
+
+## Project Goals
+
+This project is intended to explore production-oriented AI engineering concepts including:
+
+* agentic workflows
+* tool calling
+* RAG
+* structured AI decision-making
+* external APIs
+* human-in-the-loop systems
+* evaluation
+* cloud deployment
+* observability
+* CI/CD
+
+## Status
+
+**Early development — data sources and V1 workflow definition.**
