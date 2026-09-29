@@ -45,7 +45,6 @@ Returns a summarized view of the current procurement investigation.
     "evaluation_complete": bool,
     "risk_assessment_complete": bool,
     "missing_information": list[str],
-    "missing_evidence": list[str],
     "status": str
 }
 ```
@@ -60,11 +59,12 @@ Checks whether enough information exists to produce a reliable recommendation.
 
 ```python
 {
-    "requirements": dict,
-    "policy_findings": list,
+    "requirements": ProcurementRequirements | None,
+    "applicable_policies": list[str],
     "supplier_candidates": list,
-    "evaluations": list,
-    "risk_findings": list
+    "supplier_evaluations": list,
+    "risks": list,
+    "missing_information": list[str]
 }
 ```
 
@@ -73,7 +73,7 @@ Checks whether enough information exists to produce a reliable recommendation.
 ```python
 {
     "sufficient": bool,
-    "missing_evidence": list[str],
+    "missing_information": list[str],
     "reason": str
 }
 ```
@@ -206,33 +206,21 @@ This allows the agent to investigate a source in more depth instead of relying o
 
 ```python
 {
-    "requirements": {
-        "category": str,
-        "product": str,
-        "quantity": int | None,
-        "budget_eur": float | None,
-        "max_unit_budget_eur": float | None,
-        "location": str | None,
-        "delivery_deadline_days": int | None,
-        "technical_requirements": list[str]
-    },
+    "requirements": ProcurementRequirements,
 
     "missing_information": list[str],
 
-    "applicable_guidance": [
-        {
-            "finding": str,
-            "source": str
-        }
-    ],
+    "applicable_policies": list[str],
 
     "evaluation_criteria": [
         {
             "name": str,
-            "description": str,
-            "source": str
+            "weight": float,
+            "description": str | None
         }
-    ]
+    ],
+
+    "evidence": list[dict]
 }
 ```
 
@@ -360,7 +348,7 @@ Runs another supplier/tender search when existing evidence is insufficient.
 
 ```python
 {
-    "requirements": dict,
+    "requirements": ProcurementRequirements,
     "existing_suppliers": list[str],
     "reason_for_additional_search": str
 }
@@ -395,9 +383,9 @@ This can internally reuse TED and supplier-search functionality.
 
     "historical_tenders": list,
 
-    "missing_evidence": list[str],
-
-    "research_complete": bool
+    "missing_information": list[str],
+    "evidence": list[dict],
+    "research_completed": bool
 }
 ```
 
@@ -470,12 +458,7 @@ Calculates a deterministic weighted score.
 
 ```python
 {
-    "criteria": [
-        {
-            "name": str,
-            "weight": float
-        }
-    ],
+    "criteria": list[EvaluationCriterion],
     "scores": dict[str, float]
 }
 ```
@@ -500,6 +483,9 @@ Sustainability      10%
 ```
 
 The LLM must not perform the arithmetic itself.
+
+Scores use a 0-100 scale. Criterion weights use a 0-1 scale and must sum
+to 1.0. Every criterion must have exactly one score.
 
 ---
 
@@ -531,13 +517,18 @@ Applies explicit procurement approval rules.
 Example deterministic rules:
 
 ```text
-purchase value exceeds configured threshold
-critical information is missing
+purchase value exceeds a configured threshold
 only one viable supplier exists
 supplier risk is high
 ```
 
-Thresholds must be configuration values rather than prompt instructions.
+The rule for critical missing information is intentionally deferred. The
+workflow currently routes missing request information to NEEDS_INFORMATION;
+it does not infer approval from an arbitrary missing-information string.
+
+Thresholds and approval-type mappings must be configuration values rather
+than prompt instructions. This tool remains deferred until those values are
+defined.
 
 ---
 
@@ -549,10 +540,10 @@ Uses Jev to make a structured risk decision based on the accumulated evidence.
 
 ```python
 {
-    "request": dict,
-    "supplier_evaluations": list,
-    "policy_findings": list,
-    "missing_evidence": list[str]
+    "request": ProcurementRequest,
+    "supplier_evaluations": list[EvaluationResult],
+    "applicable_policies": list[str],
+    "missing_information": list[str]
 }
 ```
 
@@ -576,33 +567,9 @@ The supporting factual evidence remains stored separately.
 
 ```python
 {
-    "supplier_evaluations": [
-        {
-            "supplier": str,
-            "compliance": dict,
-            "score": float | None,
-            "strengths": list[str],
-            "weaknesses": list[str],
-            "missing_evidence": list[str]
-        }
-    ],
-
-    "preferred_option": str | None,
-
-    "risk": {
-        "level": str,
-        "confidence": float,
-        "factors": list[str]
-    },
-
-    "approval": {
-        "required": bool,
-        "type": str | None,
-        "reasons": list[str]
-    },
-
-    "additional_research_required": bool,
-    "additional_research_reason": str | None
+    "supplier_evaluations": list[EvaluationResult],
+    "risks": list[RiskApprovalResult],
+    "approval_required": bool | None
 }
 ```
 
@@ -620,7 +587,7 @@ Once the Supervisor determines that the investigation is complete, a workflow st
 
 ```python
 {
-    "procurement_state": dict
+    "procurement_state": ProcurementState
 }
 ```
 
@@ -638,19 +605,19 @@ Once the Supervisor determines that the investigation is complete, a workflow st
 
     "summary": str,
 
-    "requirements": dict,
+    "requirements": ProcurementRequirements,
 
-    "suppliers_considered": list,
+    "suppliers_considered": list[SupplierCandidate],
 
     "recommended_option": dict | None,
 
-    "evaluation": dict,
+    "evaluation": list[EvaluationResult],
 
-    "risk": dict,
+    "risk": RiskApprovalResult,
 
     "approval": dict,
 
-    "evidence": list,
+    "evidence": list[str],
 
     "unresolved_questions": list[str],
 

@@ -26,8 +26,7 @@ class ProcurementRequirements(BaseModel):
     location: str | None = None
     delivery_deadline_days: int | None = Field(default=None, gt=0)
     technical_requirements: list[str] = Field(default_factory=list)
-    missing_information: list[str] = Field(default_factory=list)
-
+    
 class SupplierCandidate(BaseModel):
     """Represents a supplier candidate for a procurement request."""
 
@@ -74,6 +73,57 @@ class FinalRecommendation(BaseModel):
     evaluation: list[EvaluationResult] = Field(default_factory=list)
     risk: RiskApprovalResult
     approval: dict
-    evidence: list[str] = Field(default_factory=list)
+    evidence: list[dict] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
     recommendation: str
+
+class EvaluationCriterion(BaseModel):
+    """Represents an evaluation criterion for supplier assessment."""
+
+    name: str
+    weight: float = Field(ge=0, le=1)
+    description: str | None = None
+
+
+# Output models (for the agents)
+
+class ProcurementAnalysisResult(BaseModel):
+    """Represents the result of the procurement analysis node."""
+
+    requirements: ProcurementRequirements
+    missing_information: list[str] = Field(default_factory=list)
+    applicable_policies: list[str] = Field(default_factory=list)
+    evaluation_criteria: list[EvaluationCriterion] = Field(default_factory=list)
+    evidence: list[dict] = Field(default_factory=list)
+
+
+class SupplierResearchResult(BaseModel):
+    """Represents the result of the supplier research node."""
+
+    supplier_candidates: list[SupplierCandidate] = Field(default_factory=list)
+    historical_tenders: list[dict] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    evidence: list[dict] = Field(default_factory=list)
+    research_completed: bool = False
+
+
+class EvaluationRiskResult(BaseModel):
+    """Represents the result of the evaluation and risk assessment node."""
+
+    supplier_evaluations: list[EvaluationResult] = Field(default_factory=list)
+    risks: list[RiskApprovalResult] = Field(default_factory=list)
+    approval_required: bool | None = None
+
+
+
+class SupervisorDecision(BaseModel):
+    """Represents the decision made by the supervisor node."""
+
+    next_action: Literal[
+        "procurement_analysis",
+        "supplier_research",
+        "evaluation_risk",
+        "finalize",
+        "needs_information",
+    ]
+    reason: str
