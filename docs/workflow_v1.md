@@ -58,7 +58,6 @@ ProcurementState = {
     "risks": [],
 
     "approval_required": bool | None,
-    "approval_reason": str | None,
 
     "evidence": [],
     "agent_history": [],

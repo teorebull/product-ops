@@ -191,7 +191,6 @@ SupervisorDecision(
         | "finalize"
         | "needs_information"
     ),
-    reason=str,
 )
 ```
 
@@ -214,9 +213,6 @@ The active routing value is stored in:
 ```python
 state.next_action
 ```
-
-The explanation in `SupervisorDecision.reason` is transient unless it is
-recorded as an entry in `state.agent_history`.
 
 ## 6. Supplier Research Agent
 
@@ -250,7 +246,6 @@ SupplierResearchResult(
     historical_tenders=list[dict],
     missing_information=list[str],
     evidence=list[dict],
-    research_completed=bool,
 )
 ```
 
@@ -265,8 +260,8 @@ missing_information
 evidence
 ```
 
-`research_completed` describes the agent result. It is not a separate
-`ProcurementState` field; the supervisor can infer completion from the state.
+The supervisor infers research completion from the state: supplier candidates,
+historical tenders, and evidence are populated before evaluation begins.
 
 ## 7. Evaluation & Risk Agent
 

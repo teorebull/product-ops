@@ -384,8 +384,7 @@ This can internally reuse TED and supplier-search functionality.
     "historical_tenders": list,
 
     "missing_information": list[str],
-    "evidence": list[dict],
-    "research_completed": bool
+    "evidence": list[dict]
 }
 ```
 

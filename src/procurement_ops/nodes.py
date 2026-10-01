@@ -29,4 +29,4 @@ def supervisor_node(state: ProcurementState, prompt: str) -> dict:
     decision_template = llm.with_structured_output(SupervisorDecision)
     decision = decision_template.invoke(message_history)
 
-    return {"next_action": decision.next_action, "reason": decision.reason}
+    return {"next_action": decision.next_action}

@@ -4,7 +4,6 @@ from pydantic import ValidationError
 from procurement_ops.models import (
     EvaluationCriterion,
     EvaluationResult,
-    EvaluationCriterion,
     EvaluationRiskResult,
     FinalRecommendation,
     ProcurementAnalysisResult,
@@ -147,12 +146,10 @@ def test_supplier_research_result_accepts_candidates_and_tenders() -> None:
         historical_tenders=[{"notice_id": "TED-001"}],
         missing_information=["delivery evidence"],
         evidence=[{"source": "TED", "reference": "TED-001"}],
-        research_completed=True,
     )
 
     assert result.supplier_candidates[0].supplier == "Example Supplier"
     assert result.historical_tenders[0]["notice_id"] == "TED-001"
-    assert result.research_completed is True
 
 
 def test_supplier_research_result_defaults_collections() -> None:
@@ -162,7 +159,6 @@ def test_supplier_research_result_defaults_collections() -> None:
     assert result.historical_tenders == []
     assert result.missing_information == []
     assert result.evidence == []
-    assert result.research_completed is False
 
 
 def test_evaluation_risk_result_accepts_evaluations_and_risks() -> None:
@@ -207,11 +203,11 @@ def test_evaluation_risk_result_defaults_optional_fields() -> None:
     ],
 )
 def test_supervisor_decision_accepts_valid_actions(next_action: str) -> None:
-    decision = SupervisorDecision(next_action=next_action, reason="Continue analysis.")
+    decision = SupervisorDecision(next_action=next_action)
 
     assert decision.next_action == next_action
 
 
 def test_supervisor_decision_rejects_invalid_action() -> None:
     with pytest.raises(ValidationError):
-        SupervisorDecision(next_action="unknown_action", reason="Invalid route.")
+        SupervisorDecision(next_action="unknown_action")
