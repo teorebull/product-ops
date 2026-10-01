@@ -48,18 +48,18 @@ class SupplierCandidate(BaseModel):
 
 class AnalysisResult(BaseModel):
     requirements: ProcurementRequirements
-    missing_information: list[str] = []
-    applicable_policies: list[str] = []
-    evidence: list[dict] = []
+    missing_information: list[str] = Field(default_factory=list)
+    applicable_policies: list[str] = Field(default_factory=list)
+    evidence: list[dict] = Field(default_factory=list)
     
 class ResearchResult(BaseModel):
-    supplier_candidates: list[dict] = []
-    historical_tenders: list[dict] = []
-    evidence: list[dict] = []
+    supplier_candidates: list[SupplierCandidate] = Field(default_factory=list)
+    historical_tenders: list[dict] = Field(default_factory=list)
+    evidence: list[dict] = Field(default_factory=list)
 
 class RecommendationResult(BaseModel):
     summary: str
     recommendation: str
     recommended_supplier: str | None = None
-    risks: list[str] = []
-    uncertainties: list[str] = []
+    risks: list[str] = Field(default_factory=list)
+    uncertainties: list[str] = Field(default_factory=list)

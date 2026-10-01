@@ -9,9 +9,10 @@ from procurement_ops.state import ProcurementState
 from procurement_ops.rag import search_collection
 
 import pymupdf
-from duckduck_search_lib import DuckDuckSearch
+from duckduckgo_search import DDGS
 import requests
 from bs4 import BeautifulSoup
+from langchain_core.tools import tool
 
 # Analysis Agent Tools
 
@@ -54,48 +55,41 @@ def search_procurement_knowledge(query: str, top_k: int = 5) -> dict:
     
     
 # Research Agent Tools
-    
-def discover_suppliers(query: str, max_results: int = 10, region: str | None = None) -> dict:
+@tool  
+def discover_suppliers(query: str, max_results: int = 10) -> dict:
     """Discover potential suppliers based on the procurement requirements.
     Used by agent: Research Agent"""
     # Initialize the searcher with your desired configuration.
-    searcher = DuckDuckSearch(
-        top_k=max_results,
-        max_results=max_results,
-        region=region or "wt-wt",
-        safesearch="moderate",
-        allowed_domain="",  # Leave empty for no domain restriction
-        use_answers=False   # Set to True if you want to retrieve direct answers from DuckDuckGo
-    )
-    results = searcher.search(query, max_results)
+    searcher = DDGS(timeout=20)
+    results = searcher.text(query, safesearch="moderate", max_results=max_results)
     
     seen_urls = set()
     supplier_candidates = []
     
     for result in results:
-        document = result["documents"]
-        url = document["link"]  
+        url = result["href"]  
 
-        
         if url in seen_urls:
             continue
         
         seen_urls.add(url)
         
         supplier_candidates.append({
-            "title": document["title"],
-            "url": document["link"],
-            "content": document["content"]})
+            "title": result.get("title"),
+            "url": url,
+            "content": result.get("body")})
     
     return {"results": supplier_candidates}
 
+@tool
 def fetch_web_page(url: str) -> dict:
     """Fetch the content of a web page.
     Used by agent: Research Agent"""
-    if not url.startswith("http"):
+    if not url.startswith(("http://", "https://")):
         raise ValueError("Invalid URL provided for supplier research.")
 
-    response = requests.get(url, timeout=10)
+    response = requests.get(url, timeout=10, headers={"User-Agent": "procurement-ops-research/0.1"})
+    response.raise_for_status()
     
     # Create a BeautifulSoup object to parse the HTML content
     soup = BeautifulSoup(response.content, "html.parser")
