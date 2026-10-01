@@ -36,6 +36,14 @@ class SupervisorDecision(BaseModel):
         "finalize",
         "needs_information",
     ]
+    
+class SupplierCandidate(BaseModel):
+    """Represents a supplier candidate."""
+
+    supplier: str
+    estimated_price_eur: float | None = None
+    delivery_days: int | None = None
+    source: str | None = None
 
 
 class AnalysisResult(BaseModel):
@@ -43,10 +51,12 @@ class AnalysisResult(BaseModel):
     missing_information: list[str] = []
     applicable_policies: list[str] = []
     evidence: list[dict] = []
+    
 class ResearchResult(BaseModel):
     supplier_candidates: list[dict] = []
     historical_tenders: list[dict] = []
     evidence: list[dict] = []
+
 class RecommendationResult(BaseModel):
     summary: str
     recommendation: str

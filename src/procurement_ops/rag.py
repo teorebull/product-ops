@@ -96,16 +96,16 @@ def load_collection(collection_name: str) -> chromadb.api.models.Collection:
     chroma_client = chromadb.PersistentClient(path=VECTOR_STORE_PATH)
     return chroma_client.get_collection(name=collection_name)
 
-def search_collection(collection_name: str, query: str, top_k: int = 5) -> list[dict]:
+def search_collection(collection_name: str, query: str, top_k: int = 5) -> dict:
     embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     query_embedding = embedding_model.encode(
-        query=query,
+        [query],
         normalize_embeddings=True,
     ).tolist()
     
     collection = load_collection(collection_name)
     results = collection.query(
-        query_embeddings=[query_embedding],
+        query_embeddings=query_embedding,
         n_results=top_k
     )
     return results
