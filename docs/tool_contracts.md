@@ -1,798 +1,245 @@
 # Tool Contracts
 
-This document defines the tools available to each agent in V1.
+This document describes the tools and structured boundaries in the current MVP. The workflow intentionally adds capabilities incrementally rather than implementing every planned procurement integration at once.
 
-The system uses **four genuine agents**:
-
-* Supervisor Agent
-* Procurement Analysis Agent
-* Supplier Research Agent
-* Evaluation & Risk Agent
-
-Deterministic operations such as calculations, threshold checks, API requests, and vector search are implemented as **tools or workflow functions**, not as agents.
-
----
-
-# 1. Supervisor Agent
-
-## Purpose
-
-Coordinate the complete procurement investigation.
-
-The Supervisor reads the shared state and decides:
-
-* which specialist agent should run next
-* whether an agent should be called again
-* whether enough evidence exists
-* whether the workflow should stop
-* whether human input is required
-
-The Supervisor does not perform detailed procurement research itself.
-
-## Available Tools
-
-### `get_workflow_state`
-
-Returns a summarized view of the current procurement investigation.
-
-#### Output
-
-```python
-{
-    "requirements_complete": bool,
-    "policy_analysis_complete": bool,
-    "supplier_research_complete": bool,
-    "evaluation_complete": bool,
-    "risk_assessment_complete": bool,
-    "missing_information": list[str],
-    "status": str
-}
-```
-
----
-
-### `check_investigation_sufficiency`
-
-Checks whether enough information exists to produce a reliable recommendation.
-
-#### Input
-
-```python
-{
-    "requirements": ProcurementRequirements | None,
-    "applicable_policies": list[str],
-    "supplier_candidates": list,
-    "supplier_evaluations": list,
-    "risks": list,
-    "missing_information": list[str]
-}
-```
-
-#### Output
-
-```python
-{
-    "sufficient": bool,
-    "missing_information": list[str],
-    "reason": str
-}
-```
-
-This may be implemented using structured model reasoning or Jev.
-
-The Supervisor uses the result to determine whether to:
+## Workflow
 
 ```text
-continue investigation
-repeat supplier research
-repeat procurement analysis
-proceed to final recommendation
-request human input
+START
+  -> supervisor_node
+  -> analysis_node
+  -> supervisor_node
+  -> research_node
+  -> supervisor_node
+  -> recommendation_node
+  -> supervisor_node
+  -> END
 ```
 
----
+All nodes communicate through `ProcurementState`. Specialist nodes return state updates; they do not call other specialist nodes directly.
 
-# 2. Procurement Analysis Agent
+## Supervisor
 
-## Purpose
+### Role
 
-Understand the purchase request and determine which procurement rules, criteria, and guidance are relevant.
+The Supervisor is deterministic routing logic, not an LLM agent. It checks which result is missing and sets `next_action`.
 
-This agent combines:
+### Actions
 
-* request interpretation
-* procurement policy research
-* RAG
-* evaluation-criteria discovery
+```text
+procurement_analysis
+supplier_research
+recommendation
+needs_information
+complete
+```
 
-It should reason about what information is relevant rather than performing a fixed set of searches.
+### Routing Rules
 
----
+```text
+analysis is missing       -> procurement_analysis
+required input is missing -> needs_information
+research is missing       -> supplier_research
+recommendation is missing -> recommendation
+all results exist         -> complete
+```
 
-## Available Tools
+`needs_information` ends or pauses the workflow. The caller can ask the requester for the values listed in the analysis result and resume with an updated request.
 
-### `calculate_unit_budget`
+The Supervisor does not search, calculate, evaluate suppliers, or generate recommendations.
 
-Calculates the maximum available budget per item.
+## Procurement Analysis
 
-#### Input
+### Role
+
+`analysis_node` interprets the original request and retrieves relevant procurement guidance from the local RAG collection. It uses a structured LLM response because the output must conform to `AnalysisResult`.
+
+### Input
 
 ```python
-{
-    "total_budget": float,
-    "quantity": int
-}
+ProcurementState.original_request: ProcurementRequest
 ```
 
-#### Output
+### Tool
+
+#### `search_procurement_knowledge`
+
+Searches the Chroma procurement knowledge collection.
 
 ```python
-{
-    "max_unit_budget": float
-}
+search_procurement_knowledge(query: str, top_k: int = 5) -> dict
 ```
 
-Deterministic Python operation.
-
----
-
-### `search_procurement_knowledge`
-
-Searches the procurement RAG knowledge base.
-
-#### Input
-
-```python
-{
-    "query": str,
-    "top_k": int
-}
-```
-
-#### Output
+Output:
 
 ```python
 {
     "results": [
         {
             "content": str,
-            "source": str,
+            "source": str | None,
+            "page": int | None,
             "section": str | None,
-            "score": float
+            "distance": float,
         }
     ]
 }
 ```
 
-Possible sources include:
-
-* EU procurement legislation
-* World Bank Procurement Regulations
-* Value for Money guidance
-* Evaluating Bids and Proposals guidance
-* Green Public Procurement criteria
-* procurement case studies
-
----
-
-### `retrieve_procurement_source`
-
-Retrieves additional context from a source already identified through RAG.
-
-#### Input
-
-```python
-{
-    "source_id": str,
-    "section": str | None
-}
-```
-
-#### Output
-
-```python
-{
-    "source": str,
-    "content": str,
-    "metadata": dict
-}
-```
-
-This allows the agent to investigate a source in more depth instead of relying only on small retrieved chunks.
-
----
-
-## Expected Agent Output
-
-```python
-{
-    "requirements": ProcurementRequirements,
-
-    "missing_information": list[str],
-
-    "applicable_policies": list[str],
-
-    "evaluation_criteria": [
-        {
-            "name": str,
-            "weight": float,
-            "description": str | None
-        }
-    ],
-
-    "evidence": list[dict]
-}
-```
-
----
-
-# 3. Supplier Research Agent
-
-## Purpose
-
-Investigate the supplier market and find evidence relevant to the purchase request.
-
-This agent decides:
-
-* what supplier information is required
-* what historical tenders should be searched
-* whether more searches are necessary
-* whether a candidate has enough evidence to be evaluated
-
-The agent may run multiple searches during a single workflow.
-
----
-
-## Available Tools
-
-### `search_tenders`
-
-Searches TED for relevant procurement notices.
-
-#### Input
-
-```python
-{
-    "keywords": list[str],
-    "country": str | None,
-    "cpv_code": str | None,
-    "date_from": str | None,
-    "date_to": str | None,
-    "limit": int
-}
-```
-
-#### Output
-
-```python
-{
-    "tenders": [
-        {
-            "notice_id": str,
-            "title": str,
-            "buyer": str | None,
-            "country": str | None,
-            "estimated_value": float | None,
-            "awarded_value": float | None,
-            "supplier": str | None,
-            "publication_date": str | None,
-            "source_url": str
-        }
-    ]
-}
-```
-
----
-
-### `get_tender_details`
-
-Retrieves detailed information about a specific tender.
-
-#### Input
-
-```python
-{
-    "notice_id": str
-}
-```
-
-#### Output
-
-```python
-{
-    "notice_id": str,
-    "description": str | None,
-    "technical_requirements": list[str],
-    "award_criteria": list,
-    "supplier": str | None,
-    "contract_value": float | None,
-    "source_url": str
-}
-```
-
----
-
-### `search_supplier_information`
-
-Retrieves public information about a supplier.
-
-#### Input
-
-```python
-{
-    "supplier_name": str,
-    "country": str | None
-}
-```
-
-#### Output
-
-```python
-{
-    "supplier": str,
-    "company_information": dict,
-    "evidence": list,
-    "sources": list[str]
-}
-```
-
-V1 may initially provide limited supplier intelligence depending on available public APIs.
-
----
-
-### `search_additional_supplier_candidates`
-
-Runs another supplier/tender search when existing evidence is insufficient.
-
-#### Input
-
-```python
-{
-    "requirements": ProcurementRequirements,
-    "existing_suppliers": list[str],
-    "reason_for_additional_search": str
-}
-```
-
-#### Output
-
-```python
-{
-    "new_candidates": list[dict]
-}
-```
-
-This can internally reuse TED and supplier-search functionality.
-
----
-
-## Expected Agent Output
-
-```python
-{
-    "supplier_candidates": [
-        {
-            "supplier": str,
-            "pricing_evidence": dict | None,
-            "delivery_evidence": dict | None,
-            "technical_evidence": dict | None,
-            "historical_contracts": list,
-            "sources": list[str]
-        }
-    ],
-
-    "historical_tenders": list,
-
-    "missing_information": list[str],
-    "evidence": list[dict]
-}
-```
-
----
-
-# 4. Evaluation & Risk Agent
-
-## Purpose
-
-Evaluate supplier candidates and determine whether the procurement recommendation is sufficiently supported and safe to proceed.
-
-This agent combines:
-
-* supplier comparison
-* compliance analysis
-* weighted evaluation
-* uncertainty assessment
-* procurement risk
-* approval requirements
-
-It may request further research through the Supervisor.
-
----
-
-## Available Tools
-
-### `evaluate_requirement_compliance`
-
-Checks a candidate against procurement requirements.
-
-#### Input
-
-```python
-{
-    "requirements": dict,
-    "supplier_evidence": dict
-}
-```
-
-#### Output
-
-```python
-{
-    "requirements": [
-        {
-            "requirement": str,
-            "status": "PASS | FAIL | UNKNOWN",
-            "evidence": str | None
-        }
-    ],
-    "overall_status": "PASS | FAIL | INCOMPLETE"
-}
-```
-
-Important:
-
-```text
-UNKNOWN != FAIL
-```
-
-Missing evidence should remain explicit.
-
----
-
-### `calculate_weighted_score`
-
-Calculates a deterministic weighted score.
-
-#### Input
-
-```python
-{
-    "criteria": list[EvaluationCriterion],
-    "scores": dict[str, float]
-}
-```
-
-#### Output
-
-```python
-{
-    "total_score": float,
-    "weighted_scores": dict
-}
-```
-
-Example:
-
-```text
-Price               35%
-Technical fit       30%
-Delivery            15%
-Warranty            10%
-Sustainability      10%
-```
-
-The LLM must not perform the arithmetic itself.
-
-Scores use a 0-100 scale. Criterion weights use a 0-1 scale and must sum
-to 1.0. Every criterion must have exactly one score.
-
----
-
-### `check_approval_rules`
-
-Applies explicit procurement approval rules.
-
-#### Input
-
-```python
-{
-    "purchase_value": float,
-    "supplier_count": int,
-    "missing_information": list[str],
-    "risk_level": str | None
-}
-```
-
-#### Output
-
-```python
-{
-    "approval_required": bool,
-    "approval_type": str | None,
-    "reasons": list[str]
-}
-```
-
-Example deterministic rules:
-
-```text
-purchase value exceeds a configured threshold
-only one viable supplier exists
-supplier risk is high
-```
-
-The rule for critical missing information is intentionally deferred. The
-workflow currently routes missing request information to NEEDS_INFORMATION;
-it does not infer approval from an arbitrary missing-information string.
-
-Thresholds and approval-type mappings must be configuration values rather
-than prompt instructions. This tool remains deferred until those values are
-defined.
-
----
-
-### `assess_procurement_risk`
-
-Uses Jev to make a structured risk decision based on the accumulated evidence.
-
-#### Input
-
-```python
-{
-    "request": ProcurementRequest,
-    "supplier_evaluations": list[EvaluationResult],
-    "applicable_policies": list[str],
-    "missing_information": list[str]
-}
-```
-
-#### Output
-
-```python
-{
-    "risk_level": "LOW | MEDIUM | HIGH",
-    "confidence": float,
-    "risk_factors": list[str]
-}
-```
-
-Jev provides the structured decision.
-
-The supporting factual evidence remains stored separately.
-
----
-
-## Expected Agent Output
-
-```python
-{
-    "supplier_evaluations": list[EvaluationResult],
-    "risks": list[RiskApprovalResult],
-    "approval_required": bool | None
-}
-```
-
----
-
-# 5. Finalization Workflow
-
-Finalization is **not an agent** in V1.
-
-Once the Supervisor determines that the investigation is complete, a workflow step builds the final response from the shared state.
-
-## `build_final_recommendation`
-
-### Input
-
-```python
-{
-    "procurement_state": ProcurementState
-}
-```
+The evidence source and metadata are retained so the model can distinguish retrieved facts from generated interpretation.
 
 ### Output
 
 ```python
-{
-    "request_id": str,
-
-    "status": (
-        "READY_TO_PROCEED"
-        "HUMAN_REVIEW_REQUIRED"
-        "NEEDS_INFORMATION"
-    ),
-
-    "summary": str,
-
-    "requirements": ProcurementRequirements,
-
-    "suppliers_considered": list[SupplierCandidate],
-
-    "recommended_option": dict | None,
-
-    "evaluation": list[EvaluationResult],
-
-    "risk": RiskApprovalResult,
-
-    "approval": dict,
-
-    "evidence": list[str],
-
-    "unresolved_questions": list[str],
-
-    "recommendation": str
-}
+AnalysisResult(
+    requirements=ProcurementRequirements(...),
+    missing_information=list[str],
+    applicable_policies=list[str],
+    evidence=list[dict],
+)
 ```
 
-The output should clearly distinguish:
+`calculate_unit_budget` is available as a deterministic helper for future analysis enhancements. It is not required for the current analysis node path.
 
-* retrieved facts
-* deterministic calculations
-* AI-generated analysis
-* unresolved uncertainty
+## Supplier Research
 
----
+### Role
 
-# 6. Multi-Agent Interaction
+`research_node` invokes the LangChain Supplier Research Agent. This is the one intentionally autonomous specialist because it must decide which search results deserve deeper investigation.
 
-Agents do not normally invoke one another directly.
+### Agent Tools
 
-They return results to the shared state.
+#### `discover_suppliers`
 
-The Supervisor then decides what happens next.
+Uses DuckDuckGo to discover possible supplier pages.
 
-```text
-Supervisor
-    ↓
-Procurement Analysis Agent
-    ↓
-Shared State
-    ↓
-Supervisor
-    ↓
-Supplier Research Agent
-    ↓
-Shared State
-    ↓
-Supervisor
-    ↓
-Evaluation & Risk Agent
-    ↓
-Shared State
-    ↓
-Supervisor
+```python
 ```
 
-A workflow can revisit an earlier agent.
-
-Example:
-
-```text
-Supplier Research Agent
-        ↓
-Evaluation & Risk Agent
-        ↓
-"Insufficient pricing evidence"
-        ↓
-Supervisor
-        ↓
-Supplier Research Agent
-        ↓
-new evidence
-        ↓
-Evaluation & Risk Agent
-```
-
-This iterative behavior is a core part of the agentic workflow.
-
----
-
-# 7. Agent / Tool Map
-
-| Agent                      | Tools                                                                                                            |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Supervisor Agent           | `get_workflow_state`, `check_investigation_sufficiency`                                                          |
-| Procurement Analysis Agent | `calculate_unit_budget`, `search_procurement_knowledge`, `retrieve_procurement_source`                           |
-| Supplier Research Agent    | `search_tenders`, `get_tender_details`, `search_supplier_information`, `search_additional_supplier_candidates`   |
-| Evaluation & Risk Agent    | `evaluate_requirement_compliance`, `calculate_weighted_score`, `assess_procurement_risk`, `check_approval_rules` |
-| Finalization workflow      | `build_final_recommendation`                                                                                     |
-
----
-
-# 8. Tool Design Principles
-
-## Agents reason; tools execute
-
-Agents determine what needs to happen.
-
-Tools perform bounded operations.
-
----
-
-## Deterministic logic stays outside the LLM
-
-Use Python for:
-
-* calculations
-* thresholds
-* validation
-* scoring formulas
-* state transformations
-
----
-
-## External information must preserve provenance
-
-RAG, TED, and supplier-data tools must return source information with their results.
-
----
-
-## Tools use structured schemas
-
-Inputs and outputs should use Pydantic models wherever practical.
-
----
-
-## Errors must be explicit
-
-Example:
+Output:
 
 ```python
 {
-    "success": False,
-    "error": "TED_API_UNAVAILABLE",
-    "message": "Unable to query TED."
+    "results": [
+        {
+            "title": str | None,
+            "url": str,
+            "content": str | None,
+        }
+    ]
 }
 ```
 
-An agent should never fabricate a result because a tool failed.
+These are search results, not verified suppliers.
 
----
+#### `fetch_web_page`
 
-## No consequential actions in V1
+Fetches and cleans one selected supplier page.
 
-Tools may:
-
-* search
-* retrieve
-* calculate
-* evaluate
-* classify
-
-Tools may not:
-
-* place purchase orders
-* transfer money
-* contact suppliers
-* sign contracts
-* approve purchases
-
----
-
-# 9. Initial Implementation Order
-
-Build tools only as they become necessary.
-
-Recommended order:
-
-```text
-1. calculate_unit_budget
-
-2. search_procurement_knowledge
-3. retrieve_procurement_source
-
-4. search_tenders
-5. get_tender_details
-
-6. evaluate_requirement_compliance
-7. calculate_weighted_score
-
-8. assess_procurement_risk
-9. check_approval_rules
-
-10. check_investigation_sufficiency
-
-11. build_final_recommendation
+```python
+fetch_web_page(url: str) -> dict
 ```
 
-`search_supplier_information` and broader supplier intelligence can be added once the core procurement flow works.
+Output:
+
+```python
+{
+    "url": str,
+    "title": str,
+    "content": str,
+}
+```
+
+The tool removes common non-content HTML elements. It does not decide whether a supplier matches the request; the Research Agent compares the page evidence with the requirements.
+
+### Output
+
+```python
+ResearchResult(
+    supplier_candidates=list[SupplierCandidate],
+    historical_tenders=list[dict],
+    evidence=list[dict],
+)
+```
+
+The current supplier candidate contract is intentionally small:
+
+```python
+SupplierCandidate(
+    supplier=str,
+    estimated_price_eur=float | None,
+    delivery_days=int | None,
+    source=str | None,
+)
+```
+
+The agent must use `None` when a page does not provide a value. It must not infer unsupported prices, delivery times, or technical details.
+
+## Recommendation
+
+### Role
+
+`recommendation_node` combines analysis and research, performs deterministic constraint evaluation, and asks a structured LLM to write the final recommendation.
+
+### Helper
+
+#### `evaluate_supplier_candidates`
+
+Compares each candidate with budget and delivery requirements.
+
+```python
+    requirements: ProcurementRequirements,
+    candidates: list[SupplierCandidate],
+) -> dict
+```
+
+Output:
+
+```python
+{
+    "evaluations": [
+        {
+            "supplier": str,
+            "within_budget": bool | None,
+            "meets_deadline": bool | None,
+            "eligible": bool | None,
+            "reasons": list[str],
+        }
+    ]
+}
+```
+
+Python performs these comparisons because deterministic calculations should not be delegated to the LLM. `None` means that the evidence needed for the comparison is unavailable.
+
+### Output
+
+```python
+RecommendationResult(
+    summary=str,
+    recommendation=str,
+    recommended_supplier=str | None,
+    risks=list[str],
+    uncertainties=list[str],
+)
+```
+
+The LLM summarizes the evidence and uncertainty. It does not invent missing supplier facts or replace deterministic evaluations.
+
+## Error and Evidence Principles
+
+- External tools may fail; callers should preserve or surface the failure rather than fabricate data.
+- Search snippets are discovery evidence, not verified supplier facts.
+- Every supplier candidate retains a source URL where available.
+- Unknown is different from false. Missing price or delivery data remains `None`.
+- Tools perform bounded retrieval and calculations; agents interpret results.
+
+## Deferred Work
+
+The following are intentionally outside the current MVP:
+
+- TED search and tender-detail tools.
+- Supplier databases and company intelligence APIs.
+- Weighted evaluation criteria.
+- Dedicated risk and approval agents.
+- Human-in-the-loop persistence and resume flows.
+- Automatic purchasing actions.

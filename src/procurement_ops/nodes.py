@@ -1,15 +1,18 @@
 """LangGraph agent node implementations."""
 
-from procurement_ops.models import RecommendationResult, SupervisorDecision
-from procurement_ops.state import ProcurementState
 from langchain_openai import ChatOpenAI
 
-from procurement_ops.tools import discover_suppliers, evaluate_supplier_candidates, fetch_web_page, search_procurement_knowledge
-from procurement_ops.models import AnalysisResult, ResearchResult
 from procurement_ops.agents import create_research_agent
-
-from procurement_ops.models import SupervisorDecision
+from procurement_ops.models import (
+    AnalysisResult,
+    RecommendationResult,
+    SupervisorDecision,
+)
 from procurement_ops.state import ProcurementState
+from procurement_ops.tools import (
+    evaluate_supplier_candidates,
+    search_procurement_knowledge,
+)
 
 
 def supervisor_node(state: ProcurementState) -> dict:
@@ -85,11 +88,19 @@ def research_node(state: ProcurementState, model_name: str) -> dict:
     
     agent = create_research_agent(model_name)
     
-    result = agent.invoke({
-        "messages": [{"role": "user", 
-                     "content": "Research suppliers for these requirements:\n"
-                    f"{state.analysis.requirements.model_dump_json()}"}]
-    })
+    result = agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Research suppliers for these requirements:\n"
+                        f"{state.analysis.requirements.model_dump_json()}"
+                    ),
+                }
+            ]
+        }
+    )
     
     return {"research": result["structured_response"]}
 
@@ -105,19 +116,23 @@ def recommendation_node(state: ProcurementState, model_name: str) -> dict:
     evaluations = evaluate_supplier_candidates(requirements, candidates)
     
     messages = [
-        {"role": "system", 
-         "content": ( 
-             "Create a procurement recommendation using only the supplied "
-             "analysis, supplier research, and evaluations. "
-             "Do not invent supplier facts. "
-             "Mention uncertainty when information is missing.")
-         },
-        {"role": "user", "content": (
+        {
+            "role": "system",
+            "content": (
+                "Create a procurement recommendation using only the supplied "
+                "analysis, supplier research, and evaluations. "
+                "Do not invent supplier facts. "
+                "Mention uncertainty when information is missing."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
                 f"Analysis:\n{state.analysis.model_dump_json()}\n\n"
                 f"Research:\n{state.research.model_dump_json()}\n\n"
                 f"Evaluations:\n{evaluations}"
-                )
-        }
+            ),
+        },
     ]
     
     recommendation_llm = ChatOpenAI(model=model_name)

@@ -1,4 +1,5 @@
 def test_package_modules_import() -> None:
+    import procurement_ops.agents
     import procurement_ops.graph
     import procurement_ops.models
     import procurement_ops.nodes

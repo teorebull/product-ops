@@ -1,19 +1,11 @@
 """Deterministic procurement tools."""
 
-# import boto3 maybe later
-from procurement_ops.models import (
-    ProcurementRequirements,
-    SupplierCandidate,
-)
-from procurement_ops.state import ProcurementState
-from procurement_ops.models import ProcurementRequirements, SupplierCandidate
-from procurement_ops.rag import search_collection
-
-import pymupdf
-from duckduckgo_search import DDGS
+from langchain_core.tools import tool
 import requests
 from bs4 import BeautifulSoup
-from langchain_core.tools import tool
+from duckduckgo_search import DDGS
+
+from procurement_ops.models import ProcurementRequirements, SupplierCandidate
 
 # Analysis Agent Tools
 
@@ -31,6 +23,8 @@ def calculate_unit_budget(total_budget: float, quantity: int) -> dict:
 def search_procurement_knowledge(query: str, top_k: int = 5) -> dict:
     """Search the procurement knowledge base for relevant information.
     Used by agent: Analysis Agent"""
+    from procurement_ops.rag import search_collection
+
     results = search_collection("my_collection", query, top_k)
     
     documents = results["documents"][0]
@@ -60,6 +54,7 @@ def search_procurement_knowledge(query: str, top_k: int = 5) -> dict:
 def discover_suppliers(query: str, max_results: int = 10) -> dict:
     """Discover potential suppliers based on the procurement requirements.
     Used by agent: Research Agent"""
+
     # Initialize the searcher with your desired configuration.
     searcher = DDGS(timeout=20)
     results = searcher.text(query, safesearch="moderate", max_results=max_results)
@@ -86,6 +81,7 @@ def discover_suppliers(query: str, max_results: int = 10) -> dict:
 def fetch_web_page(url: str) -> dict:
     """Fetch the content of a web page.
     Used by agent: Research Agent"""
+
     if not url.startswith(("http://", "https://")):
         raise ValueError("Invalid URL provided for supplier research.")
 

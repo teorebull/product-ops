@@ -1,153 +1,113 @@
 # Procurement Operations Agent
 
-An agentic AI application that helps internal procurement teams evaluate purchase requests, retrieve relevant procurement guidance, investigate supplier options, and determine the appropriate next action.
+An MVP procurement workflow that turns a purchase request into a structured recommendation. The current scope focuses on IT procurement, such as laptops, monitors, and related hardware.
 
-The initial scope focuses on **IT procurement**, such as laptops, monitors, and related hardware.
+## What It Does
 
-## Business Problem
+The workflow:
 
-Procurement teams often need to combine information from multiple sources before making a decision:
+1. Extracts procurement requirements and retrieves relevant procurement guidance.
+2. Discovers potential suppliers through DuckDuckGo.
+3. Fetches selected supplier pages and extracts evidence.
+4. Evaluates objective constraints such as budget and delivery time.
+5. Produces a structured recommendation with uncertainty preserved.
 
-* internal purchase requirements
-* procurement policies
-* supplier information
-* historical tenders
-* evaluation criteria
-* sustainability requirements
-* approval rules
+The system recommends and escalates. It does not place orders, contact suppliers, or approve purchases.
 
-This process can involve significant manual research and repetitive analysis.
+## Architecture
 
-The goal of this project is to build an AI agent that can autonomously investigate a procurement request, gather the required evidence, and produce a structured recommendation while escalating decisions that require human approval.
-
-## Example
-
-Input:
-
-> We need 40 laptops for our Barcelona office.
-> Budget: €45,000.
-> Delivery required within 3 weeks.
-
-The agent may:
-
-1. Extract the purchase requirements.
-2. Retrieve relevant procurement rules and evaluation guidance.
-3. Search historical procurement data and potential suppliers.
-4. Compare available options.
-5. Identify missing information or risks.
-6. Determine whether human approval is required.
-7. Return a recommendation with supporting evidence.
-
-## Agentic Workflow
-
-The application is designed as a tool-using agent rather than a fixed LLM pipeline.
-
-The agent can decide which actions are required depending on the request.
+LangGraph owns the workflow and shared state. Specialist steps communicate through `ProcurementState`; they do not call one another directly.
 
 ```text
-Purchase Request
-      |
-      v
-Requirement Analysis
-      |
-      v
-Procurement Agent
-      |
-      +--> Search Procurement Knowledge Base
-      |
-      +--> Search Historical Tenders
-      |
-      +--> Retrieve Supplier Information
-      |
-      +--> Evaluate Procurement Criteria
-      |
-      +--> Check Risks / Approval Requirements
-      |
-      v
-Recommendation / Human Escalation
+START
+  -> Supervisor
+  -> Analysis
+  -> Supervisor
+  -> Supplier Research
+  -> Supervisor
+  -> Recommendation
+  -> Supervisor
+  -> END
 ```
+
+The Supervisor is deterministic. It checks which result is missing and routes to the corresponding node. This keeps routing predictable and makes the workflow easy to test.
+
+The Supplier Research Agent uses LangChain's `create_agent` because research is open-ended: it can choose search results, fetch relevant pages, and decide which evidence is useful. Analysis and Recommendation use normal structured-output nodes because their inputs and steps are known in advance.
+
+## Components
+
+### Analysis Node
+
+Reads the original request and searches the local procurement RAG collection. It returns an `AnalysisResult` containing:
+
+- `ProcurementRequirements`
+- missing information
+- applicable policies
+- source evidence
+
+### Supplier Research Agent
+
+The agent has two tools:
+
+- `discover_suppliers`: searches DuckDuckGo and returns result titles, URLs, and snippets.
+- `fetch_web_page`: downloads a selected page and extracts readable text.
+
+The agent returns `ResearchResult` with validated `SupplierCandidate` objects. Unsupported values remain `None` rather than being invented.
+
+### Recommendation Node
+
+Uses the analysis and research results. Before asking the LLM to write the recommendation, it calls the deterministic `evaluate_supplier_candidates` helper to compare price and delivery constraints. Python performs the calculations; the LLM summarizes the evidence and uncertainty.
+
+### Supervisor Node
+
+Routes based on state:
+
+```text
+No analysis       -> procurement_analysis
+No research       -> supplier_research
+No recommendation -> recommendation
+Missing required  -> needs_information
+Everything done   -> complete
+```
+
+It is implemented as normal Python rather than an LLM because the routing rules are explicit.
 
 ## Data Sources
 
-The project uses public procurement material from official sources.
+- Local procurement guidance indexed in Chroma for analysis.
+- DuckDuckGo search results for supplier discovery.
+- Public supplier web pages for research.
 
-The initial RAG knowledge base includes:
+The web results are treated as evidence, not as verified facts. Missing information is preserved as uncertainty.
 
-* EU Public Procurement Directive 2014/24/EU
-* World Bank Procurement Regulations
-* World Bank guidance on evaluating bids and proposals
-* World Bank Value for Money guidance
-* EU Green Public Procurement criteria for computers and related hardware
-* EU socially responsible procurement case studies
+## Example Request
 
-Historical procurement notices will be retrieved from **TED (Tenders Electronic Daily)**.
+```text
+We need 40 business laptops for our Barcelona office.
+The budget is EUR 45,000 and delivery is required within 21 days.
+Each laptop must have at least 16 GB RAM and a 3-year warranty.
+```
 
-Source files are not committed to the repository. Official download links are documented separately.
+## Deliberately Deferred
 
-## Planned Stack
+The MVP does not yet implement:
 
-* **Python**
-* **LangGraph**
-* **LangChain**
-* **Jev**
-* **FastAPI**
-* **Amazon Bedrock**
-* **PostgreSQL / pgvector**
-* **TED API**
-* **Docker**
-* **GitHub Actions**
-* **AWS**
+- TED tender API integration.
+- Historical tender retrieval.
+- Dedicated risk or approval agents.
+- Weighted evaluation criteria.
+- Human approval workflows.
+- Automatic purchasing or supplier contact.
 
-## Role of AI Components
+These can be added after the core workflow and its tests are stable.
 
-### LLM
+## Development
 
-Used for reasoning, requirement interpretation, evidence synthesis, and recommendation generation.
+The project uses Python, LangGraph, LangChain, Pydantic, Chroma, and local PDF embeddings. The graph can be visualized with:
 
-### LangGraph
+```python
+app = build_graph("gpt-5.6-luna")
+print(app.get_graph().draw_mermaid())
+```
 
-Controls the stateful agent workflow and tool execution.
-
-### RAG
-
-Provides access to procurement regulations, evaluation guidance, sustainability criteria, and historical procurement knowledge.
-
-### Jev
-
-Used for structured decisions such as:
-
-* procurement risk
-* approval requirements
-* supplier suitability
-* whether additional investigation is required
-
-## Initial Scope
-
-V1 will focus on:
-
-* IT hardware procurement
-* one procurement request at a time
-* one primary agent
-* public procurement data
-* recommendation and escalation rather than autonomous purchasing
-
-The system will **not automatically place orders or approve high-impact procurement decisions**.
-
-## Project Goals
-
-This project is intended to explore production-oriented AI engineering concepts including:
-
-* agentic workflows
-* tool calling
-* RAG
-* structured AI decision-making
-* external APIs
-* human-in-the-loop systems
-* evaluation
-* cloud deployment
-* observability
-* CI/CD
-
-## Status
-
-**Early development — data sources and V1 workflow definition.**
+The test suite mocks model and external-tool calls so node and workflow behavior can be verified without API keys, web access, or a populated vector store.
