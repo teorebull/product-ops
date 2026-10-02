@@ -1,9 +1,6 @@
 """Deterministic procurement tools."""
 
 from langchain_core.tools import tool
-import requests
-from bs4 import BeautifulSoup
-from duckduckgo_search import DDGS
 
 from procurement_ops.models import ProcurementRequirements, SupplierCandidate
 
@@ -54,6 +51,8 @@ def search_procurement_knowledge(query: str, top_k: int = 5) -> dict:
 def discover_suppliers(query: str, max_results: int = 10) -> dict:
     """Discover potential suppliers based on the procurement requirements.
     Used by agent: Research Agent"""
+    from duckduckgo_search import DDGS
+
 
     # Initialize the searcher with your desired configuration.
     searcher = DDGS(timeout=20)
@@ -81,6 +80,9 @@ def discover_suppliers(query: str, max_results: int = 10) -> dict:
 def fetch_web_page(url: str) -> dict:
     """Fetch the content of a web page.
     Used by agent: Research Agent"""
+    import requests
+    from bs4 import BeautifulSoup
+
 
     if not url.startswith(("http://", "https://")):
         raise ValueError("Invalid URL provided for supplier research.")

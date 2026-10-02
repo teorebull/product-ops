@@ -111,3 +111,23 @@ print(app.get_graph().draw_mermaid())
 ```
 
 The test suite mocks model and external-tool calls so node and workflow behavior can be verified without API keys, web access, or a populated vector store.
+
+## FastAPI Backend
+
+The compiled graph can be exposed as a small HTTP API:
+
+```bash
+uv run uvicorn procurement_ops.api:app --reload
+```
+
+Available endpoints:
+
+```text
+GET  /health
+POST /api/procure
+POST /api/procure/stream
+```
+
+`/api/procure` waits for the workflow and returns the final `ProcurementState`.
+
+`/api/procure/stream` returns Server-Sent Events as each LangGraph node completes. This lets a frontend show progress such as analysis, research, and recommendation without putting workflow logic in the frontend.
