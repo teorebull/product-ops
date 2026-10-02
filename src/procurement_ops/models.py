@@ -32,8 +32,8 @@ class SupervisorDecision(BaseModel):
     next_action: Literal[
         "procurement_analysis",
         "supplier_research",
-        "evaluation_risk",
-        "finalize",
+        "recommendation",
+        "complete",
         "needs_information",
     ]
     

@@ -6,6 +6,7 @@ from procurement_ops.models import (
     SupplierCandidate,
 )
 from procurement_ops.state import ProcurementState
+from procurement_ops.models import ProcurementRequirements, SupplierCandidate
 from procurement_ops.rag import search_collection
 
 import pymupdf
@@ -106,3 +107,59 @@ def fetch_web_page(url: str) -> dict:
         "title": soup.title.string if soup.title else "No Title Found",
         "content": content,
     }
+    
+# Recommendation agent
+
+def evaluate_supplier_candidates(
+    requirements: ProcurementRequirements,
+    candidates: list[SupplierCandidate],
+) -> dict:
+    """Evaluate supplier candidates against the procurement requirements.
+    Used by agent: Recommendation Agent"""
+    evaluations = []
+
+    for candidate in candidates:
+        reasons = []
+
+        if (
+            candidate.estimated_price_eur is None
+            or requirements.budget_eur is None
+        ):
+            within_budget = None
+            reasons.append("Budget comparison is unavailable.")
+        elif candidate.estimated_price_eur <= requirements.budget_eur:
+            within_budget = True
+            reasons.append("Estimated price is within budget.")
+        else:
+            within_budget = False
+            reasons.append("Estimated price exceeds the available budget.")
+
+        if (
+            candidate.delivery_days is None
+            or requirements.delivery_deadline_days is None
+        ):
+            meets_deadline = None
+            reasons.append("Delivery deadline comparison is unavailable.")
+        elif candidate.delivery_days <= requirements.delivery_deadline_days:
+            meets_deadline = True
+            reasons.append("Delivery time meets the required deadline.")
+        else:
+            meets_deadline = False
+            reasons.append("Delivery time exceeds the required deadline.")
+
+        if within_budget is False or meets_deadline is False:
+            eligible = False
+        elif within_budget is True and meets_deadline is True:
+            eligible = True
+        else:
+            eligible = None
+
+        evaluations.append({
+            "supplier": candidate.supplier,
+            "within_budget": within_budget,
+            "meets_deadline": meets_deadline,
+            "eligible": eligible,
+            "reasons": reasons,
+        })
+
+    return {"evaluations": evaluations}
